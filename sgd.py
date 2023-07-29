@@ -5,7 +5,7 @@ from torchvision import transforms
 from torchvision.models import VGG13_BN_Weights, vgg13_bn
 from tqdm import tqdm
 
-DEVICE = "cpu"  # "cuda"
+DEVICE = "cpu"
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
@@ -22,11 +22,16 @@ def save_img(image, path):
 def main():
     model = vgg13_bn(VGG13_BN_Weights.IMAGENET1K_V1).to(DEVICE)
     print(model)
-    for label in [0, 12, 954]:
-        image = torch.randn(1, 224, 224, 3).to(DEVICE)
+    for label in [0 , 12, 954]:
+        # Dimensions are batch size x height x width x color channels 
+        image = torch.randn(1, 224, 224, 3).to(DEVICE) # picks points from a standard normal distribution
+        # Helps in creating a more dynamic image, *8, since the points sampled are from a normal distribution
+        ## Moreover, the +128 is used to normalize the image 
         image = (image * 8 + 128) / 255  # background color = 128,128,128
+        # The permute function is used to change the shape of the image from 
+        ## batch_size(0) x height(1) x width(2) x color_channels(3) to (0, 3, 1, 2) 
         image = image.permute(0, 3, 1, 2)
-        image.requires_grad_()
+        image.requires_grad_() # this line enables gradient descent on the image 
         image = gradient_descent(image, model, lambda tensor: tensor[0, label].mean(),)
         save_img(image, f"./img_{label}.jpg")
         out = model(image)
@@ -46,7 +51,22 @@ def normalize_and_jitter(img, step=32):
 
 
 def gradient_descent(input, model, loss, iterations=256):
-    return input  # IMPLEMENT ME
+    lr = 0.1
+    input.data = normalize_and_jitter(input)
+    # input = input.detach()
+    # input.requires_grad = True
+    for i in tqdm(range(iterations)):
+        output = model(input)
+        loss_val = loss(output)
+        loss_val.backward()
+        with torch.no_grad():
+            input.data = input.data + lr*input.grad
+            input.data = input.data.clamp(0, 1)
+        a = input.grad.clone()
+        input.grad.zero_()
+    # input.requires_grad = False
+    print (a)
+    return input
 
 
 def forward_and_return_activation(model, input, module):
@@ -67,7 +87,5 @@ def forward_and_return_activation(model, input, module):
     handle.remove()
 
     return features[0]
-
-
 if __name__ == "__main__":
     main()
